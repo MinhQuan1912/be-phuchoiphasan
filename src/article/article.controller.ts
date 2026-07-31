@@ -30,8 +30,6 @@ import {
 } from './dto/article.dto';
 import { JwtAuthGuard } from '../auth/guard/jwt-auth.guard';
 
-// Chặn ở tầng multer để tệp quá khổ không kịp nằm hết trong RAM.
-// Ngưỡng khớp MAX_FILE_BYTES trong article.service (kiểm tra lại kèm thông báo rõ ràng).
 const UPLOAD_LIMITS = { limits: { fileSize: 20 * 1024 * 1024 } };
 
 function withFeaturedNote(base: string, unfeatured: UnfeaturedArticle[]) {

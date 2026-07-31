@@ -73,7 +73,6 @@ model ContentBlock {
 enum BlockType {
   TEXT
   IMAGE
-  // Tệp đính kèm (PDF): content = URL trên S3, caption = tên hiển thị
   FILE
 }
 

@@ -8,13 +8,11 @@ import {
 } from 'class-validator';
 
 export class CreateContactDto {
-  // Khóa dịch vụ khớp danh sách ở trang Liên hệ của Frontend
   @IsString()
   @IsNotEmpty({ message: 'Vui lòng chọn dịch vụ cần tư vấn' })
   @MaxLength(50)
   service: string;
 
-  // Chỉ dùng khi service = 'khac'
   @IsOptional()
   @IsString()
   @MaxLength(200)

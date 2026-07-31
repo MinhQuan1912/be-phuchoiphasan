@@ -35,8 +35,6 @@ type BlockInput =
       caption?: string;
     }
   | {
-      // Tệp đính kèm: fileIndex trỏ vào mảng contentFiles của multipart,
-      // content có sẵn URL http nghĩa là giữ tệp cũ khi sửa bài
       type: 'FILE';
       fileIndex: number;
       content?: string;
@@ -48,11 +46,6 @@ function normalizeCaption(raw?: string): string | null {
   return trimmed ? trimmed : null;
 }
 
-/**
- * Tên hiển thị của tệp: ưu tiên caption người soạn nhập, không có thì lấy tên gốc.
- * Phải giải mã `originalname` (multer đọc theo latin1) nếu không tên tiếng Việt
- * lưu xuống DB sẽ là ký tự lạ.
- */
 function fileLabel(caption: string | undefined, file?: Express.Multer.File) {
   const fallback = file ? decodeOriginalName(file.originalname) : undefined;
   return normalizeCaption(caption) ?? fallback ?? null;
@@ -116,6 +109,26 @@ export class ArticleService {
         this.logger.error(`Không xóa được file S3: ${url}`, err as Error);
       }
     }
+  }
+
+  /**
+   * Ghi lại chặng upload S3 — chặng duy nhất có thể mất vài giây khi lưu bài.
+   * Có dòng log này thì lần sau chậm là biết ngay do file hay do chỗ khác.
+   */
+  private logUpload(
+    action: string,
+    startedAt: number,
+    thumbnail: Express.Multer.File | undefined,
+    images: Express.Multer.File[],
+    files: Express.Multer.File[],
+  ) {
+    const all = [...(thumbnail ? [thumbnail] : []), ...images, ...files];
+    if (!all.length) return;
+    const mb = all.reduce((sum, f) => sum + f.size, 0) / 1024 / 1024;
+    this.logger.log(
+      `[${action}] Upload S3: ${all.length} file (${mb.toFixed(2)}MB) trong ${Date.now() - startedAt}ms` +
+        ` — ảnh đại diện ${thumbnail ? 1 : 0}, ảnh trong bài ${images.length}, tệp ${files.length}`,
+    );
   }
 
   private async getCategoryOrThrow(categoryId: string) {
@@ -257,7 +270,6 @@ export class ArticleService {
           effectiveDate: true,
           createdAt: true,
           category: { select: { id: true, name: true, slug: true, kind: true } },
-          // Khối chữ đầu tiên — dùng để cắt đoạn trích thay cho mô tả ngắn
           blocks: {
             where: { type: BlockType.TEXT },
             orderBy: { order: 'asc' },
@@ -422,15 +434,17 @@ export class ArticleService {
     const slug = dto.slug
       ? await this.resolveManualSlug(dto.slug)
       : await this.generateSlugFromTitle(dto.title);
+    const images = contentImages || [];
+    const uploadStart = Date.now();
+    const [thumbnailUrl, ...restUrls] = await Promise.all([
+      this.s3.upload(thumbnail),
+      ...images.map((f) => this.s3.upload(f)),
+      ...contentFiles.map((f) => this.s3.upload(f, 'files')),
+    ]);
+    const uploadedUrls = restUrls.slice(0, images.length);
+    const uploadedFileUrls = restUrls.slice(images.length);
 
-    const thumbnailUrl = thumbnail ? await this.s3.upload(thumbnail) : '';
-
-    const uploadedUrls = await Promise.all(
-      (contentImages || []).map((f) => this.s3.upload(f)),
-    );
-    const uploadedFileUrls = await Promise.all(
-      contentFiles.map((f) => this.s3.upload(f, 'files')),
-    );
+    this.logUpload('create', uploadStart, thumbnail, images, contentFiles);
 
     try {
       const blockData = blocks.map((b, i) => {
@@ -545,13 +559,18 @@ export class ArticleService {
 
       if (dto.blocks !== undefined) {
         const blocks = this.parseBlocks(dto.blocks);
-        const uploadedUrls = await Promise.all(
-          (contentImages || []).map((f) => this.s3.upload(f)),
-        );
-        const uploadedFileUrls = await Promise.all(
-          contentFiles.map((f) => this.s3.upload(f, 'files')),
-        );
-        uploaded.push(...uploadedUrls, ...uploadedFileUrls);
+
+        const images = contentImages || [];
+        const uploadStart = Date.now();
+        const urls = await Promise.all([
+          ...images.map((f) => this.s3.upload(f)),
+          ...contentFiles.map((f) => this.s3.upload(f, 'files')),
+        ]);
+        const uploadedUrls = urls.slice(0, images.length);
+        const uploadedFileUrls = urls.slice(images.length);
+        uploaded.push(...urls);
+
+        this.logUpload('update', uploadStart, undefined, images, contentFiles);
 
         blockData = blocks.map((b, i) => {
           if (b.type === 'IMAGE') {
@@ -569,7 +588,6 @@ export class ArticleService {
             return { type: 'IMAGE' as const, content: url, caption, order: i };
           }
           if (b.type === 'FILE') {
-            // Giữ tệp cũ: người soạn không chọn tệp mới, chỉ có thể đổi tên hiển thị
             if (b.content && b.content.startsWith('http')) {
               return {
                 type: 'FILE' as const,
@@ -590,7 +608,6 @@ export class ArticleService {
           return { type: 'TEXT' as const, content: b.content || '', order: i };
         });
 
-        // Ảnh/tệp không còn được block nào trỏ tới thì xóa khỏi S3
         const keepUrls = new Set(
           blockData
             .filter((b) => b.type === 'IMAGE' || b.type === 'FILE')
@@ -640,7 +657,6 @@ export class ArticleService {
     });
     if (!existing) throw new NotFoundException('Không tìm thấy bài viết');
     await this.prisma.article.delete({ where: { id } });
-    // Mọi block không phải chữ đều trỏ tới một object trên S3 (ảnh hoặc tệp PDF)
     const uploads = existing.blocks
       .filter((b) => b.type !== 'TEXT')
       .map((b) => b.content);

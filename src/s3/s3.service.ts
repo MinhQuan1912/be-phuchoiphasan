@@ -38,9 +38,6 @@ export class S3Service {
         Key: key,
         Body: file.buffer,
         ContentType: file.mimetype,
-        // inline: ảnh/PDF vẫn xem trực tiếp được trong trang (iframe không bị ép tải).
-        // filename* giữ tên gốc có dấu để lúc tải về đúng tên người dùng đã đặt;
-        // filename ASCII là bản dự phòng cho trình duyệt cũ (RFC 6266).
         ContentDisposition: `inline; filename="${safeName}"; filename*=UTF-8''${encodeURIComponent(original)}`,
       }),
     );

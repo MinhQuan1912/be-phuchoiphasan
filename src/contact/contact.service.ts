@@ -2,7 +2,6 @@ import { Injectable, Logger } from '@nestjs/common';
 import { MailService } from '../mail/mail.service';
 import { CreateContactDto } from './dto/contact.dto';
 
-// Giữ đồng bộ với --color-primary của Frontend/Admin (tông đậm/nhạt lấy từ cùng thang xanh)
 const BRAND = '#22c55e';
 const BRAND_DARK = '#15803d';
 const BRAND_SOFT = '#dcfce7';
