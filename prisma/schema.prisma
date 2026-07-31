@@ -1,0 +1,97 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Admin {
+  id        String   @id @default(uuid())
+  username  String   @unique
+  password  String
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Category {
+  id        String       @id @default(uuid())
+  name      String       @unique
+  slug      String       @unique
+  kind      CategoryKind @default(NEWS)
+  articles  Article[]
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@index([kind])
+}
+
+model Article {
+  id           String         @id @default(uuid())
+  title        String
+  slug         String         @unique
+  thumbnail    String
+  status       ArticleStatus  @default(DRAFT)
+  featured     Boolean        @default(false)
+  views        Int            @default(0)
+  court        Court?
+  documentCode  String?
+  effectiveDate DateTime?
+  categoryId   String
+  category     Category       @relation(fields: [categoryId], references: [id])
+  blocks       ContentBlock[]
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@index([createdAt])
+  @@index([status, createdAt])
+  @@index([status, featured])
+  @@index([status, views])
+  @@index([categoryId])
+}
+
+model ContentBlock {
+  id        String      @id @default(uuid())
+  type      BlockType
+  content   String      @db.Text
+  caption   String?     @db.Text
+  order     Int
+  articleId String
+  article   Article     @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  @@index([articleId])
+}
+
+enum BlockType {
+  TEXT
+  IMAGE
+  // Tệp đính kèm (PDF): content = URL trên S3, caption = tên hiển thị
+  FILE
+}
+
+enum ArticleStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum CategoryKind {
+  NEWS
+  NOTICE 
+  EVENT 
+  FAQ 
+  LEGAL 
+}
+
+enum Court {
+  KV2_HA_NOI 
+  KV1_DA_NANG 
+  KV1_HCM 
+}
