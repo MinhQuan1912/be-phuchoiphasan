@@ -17,11 +17,17 @@ const NOTICE_CATEGORIES = [
   },
 ];
 
-const EXTRA_ADMINS = [{ username: 'abc@gmail.com', name: 'Admin ABC' }];
-
 async function main() {
-  const username = process.env.ADMIN_USERNAME || 'admin';
-  const password = process.env.ADMIN_PASSWORD || '123456';
+  const username = process.env.ADMIN_USERNAME;
+  const password = process.env.ADMIN_PASSWORD;
+
+  if (!username || !password) {
+    throw new Error(
+      'Thiếu ADMIN_USERNAME hoặc ADMIN_PASSWORD. Ví dụ:\n' +
+        '  ADMIN_USERNAME="admin@congty.vn" ADMIN_PASSWORD="<mật khẩu mạnh>" pnpm prisma db seed',
+    );
+  }
+
   const hashed = await bcrypt.hash(password, 10);
 
   await prisma.admin.upsert({
@@ -30,19 +36,6 @@ async function main() {
     create: { username, password: hashed, name: 'Administrator' },
   });
   console.log('Seeded admin:', username);
-
-  for (const a of EXTRA_ADMINS) {
-    await prisma.admin.upsert({
-      where: { username: a.username },
-      update: {},
-      create: {
-        username: a.username,
-        password: await bcrypt.hash(a.username, 10),
-        name: a.name,
-      },
-    });
-    console.log('Seeded admin:', a.username);
-  }
 
   for (const c of NOTICE_CATEGORIES) {
     await prisma.category.upsert({
@@ -83,4 +76,9 @@ async function main() {
   console.log('Seeded legal category: van-ban-phap-luat');
 }
 
-main().finally(() => prisma.$disconnect());
+main()
+  .catch((e: unknown) => {
+    console.error(e instanceof Error ? e.message : e);
+    process.exitCode = 1;
+  })
+  .finally(() => prisma.$disconnect());
