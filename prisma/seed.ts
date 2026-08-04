@@ -17,7 +17,10 @@ const NOTICE_CATEGORIES = [
   },
 ];
 
-async function main() {
+type AdminSeed = { username: string; password: string; name: string };
+
+
+function readAdminAccounts(): AdminSeed[] {
   const username = process.env.ADMIN_USERNAME;
   const password = process.env.ADMIN_PASSWORD;
 
@@ -28,14 +31,48 @@ async function main() {
     );
   }
 
-  const hashed = await bcrypt.hash(password, 10);
+  const accounts: AdminSeed[] = [
+    { username, password, name: 'Administrator' },
+  ];
 
-  await prisma.admin.upsert({
-    where: { username },
-    update: {},
-    create: { username, password: hashed, name: 'Administrator' },
-  });
-  console.log('Seeded admin:', username);
+  for (const entry of (process.env.ADMIN_ACCOUNTS ?? '').split(',')) {
+    const raw = entry.trim();
+    if (!raw) continue;
+
+    const at = raw.indexOf(':');
+    const user = at > 0 ? raw.slice(0, at).trim() : '';
+    const pass = at > 0 ? raw.slice(at + 1).trim() : '';
+
+    if (!user || !pass) {
+      throw new Error(
+        `ADMIN_ACCOUNTS sai định dạng ở "${raw}" — cần dạng username:password`,
+      );
+    }
+    if (accounts.some((a) => a.username === user)) {
+      throw new Error(`ADMIN_ACCOUNTS có username trùng: "${user}"`);
+    }
+
+    accounts.push({ username: user, password: pass, name: user });
+  }
+
+  return accounts;
+}
+
+async function main() {
+  for (const account of readAdminAccounts()) {
+    const hashed = await bcrypt.hash(account.password, 10);
+
+    await prisma.admin.upsert({
+      where: { username: account.username },
+      update: {},
+      create: {
+        username: account.username,
+        password: hashed,
+        name: account.name,
+      },
+    });
+    console.log('Seeded admin:', account.username);
+  }
 
   for (const c of NOTICE_CATEGORIES) {
     await prisma.category.upsert({

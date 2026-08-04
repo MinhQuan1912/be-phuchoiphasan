@@ -26,7 +26,17 @@ export class AuthService {
     if (!valid)
       throw new UnauthorizedException('Tài khoản hoặc mật khẩu không đúng');
 
-    return this.jwt.sign({ sub: admin.id, username: admin.username });
+    const tokenIssuedAt = new Date();
+    await this.prisma.admin.update({
+      where: { id: admin.id },
+      data: { tokenIssuedAt },
+    });
+
+    return this.jwt.sign({
+      sub: admin.id,
+      username: admin.username,
+      tokenIssuedAt: tokenIssuedAt.getTime(),
+    });
   }
 
   async changePassword(adminId: string, dto: ChangePasswordDto): Promise<void> {
