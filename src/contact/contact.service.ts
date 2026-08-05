@@ -15,10 +15,10 @@ interface InfoRow {
 }
 
 const SERVICE_LABEL: Record<string, string> = {
-  'pha-san': 'Phá sản',
-  'phuc-hoi': 'Phục hồi',
-  'tu-van': 'Tư vấn pháp lý',
-  'quan-ly-tai-san': 'Quản lý tài sản',
+  'thu-tuc-pha-san': 'Thủ tục phá sản',
+  'phuc-hoi-kinh-doanh': 'Phục hồi hoạt động kinh doanh',
+  'tu-van-phap-ly': 'Tư vấn pháp lý',
+  'quan-ly-tai-san': 'Quản lý và khai thác tài sản',
   khac: 'Khác',
 };
 
