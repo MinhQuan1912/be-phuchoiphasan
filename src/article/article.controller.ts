@@ -10,6 +10,7 @@ import {
   Post,
   Put,
   Query,
+  Req,
   UploadedFiles,
   UseGuards,
   UseInterceptors,
@@ -163,6 +164,7 @@ export class ArticleController {
     ),
   )
   async update(
+    @Req() req,
     @Param('id') id: string,
     @Body() dto: UpdateArticleDto,
     @UploadedFiles()
@@ -178,6 +180,7 @@ export class ArticleController {
       files.thumbnail?.[0],
       files.contentImages || [],
       files.contentFiles || [],
+      req.user,
     );
     return {
       message: withFeaturedNote('Cập nhật bài viết thành công', unfeatured),
@@ -187,8 +190,16 @@ export class ArticleController {
 
   @UseGuards(JwtAuthGuard)
   @Patch(':id/status')
-  async setStatus(@Param('id') id: string, @Body() dto: UpdateStatusDto) {
-    const { article, unfeatured } = await this.service.setStatus(id, dto.status);
+  async setStatus(
+    @Req() req,
+    @Param('id') id: string,
+    @Body() dto: UpdateStatusDto,
+  ) {
+    const { article, unfeatured } = await this.service.setStatus(
+      id,
+      dto.status,
+      req.user,
+    );
     const base =
       dto.status === 'PUBLISHED' ? 'Đã đăng bài viết' : 'Đã chuyển về bản nháp';
     return {
@@ -199,10 +210,10 @@ export class ArticleController {
 
   @UseGuards(JwtAuthGuard)
   @Delete(':id')
-  async remove(@Param('id') id: string) {
+  async remove(@Req() req, @Param('id') id: string) {
     return {
       message: 'Xóa bài viết thành công',
-      data: await this.service.remove(id),
+      data: await this.service.remove(id, req.user),
     };
   }
 }

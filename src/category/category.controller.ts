@@ -7,6 +7,7 @@ import {
   Post,
   Put,
   Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
 import { CategoryKind } from '@prisma/client';
@@ -42,19 +43,23 @@ export class CategoryController {
 
   @UseGuards(JwtAuthGuard)
   @Put(':id')
-  async update(@Param('id') id: string, @Body() dto: UpdateCategoryDto) {
+  async update(
+    @Req() req,
+    @Param('id') id: string,
+    @Body() dto: UpdateCategoryDto,
+  ) {
     return {
       message: 'Cập nhật chuyên mục thành công',
-      data: await this.service.update(id, dto),
+      data: await this.service.update(id, dto, req.user),
     };
   }
 
   @UseGuards(JwtAuthGuard)
   @Delete(':id')
-  async remove(@Param('id') id: string) {
+  async remove(@Req() req, @Param('id') id: string) {
     return {
       message: 'Xóa chuyên mục thành công',
-      data: await this.service.remove(id),
+      data: await this.service.remove(id, req.user),
     };
   }
 }

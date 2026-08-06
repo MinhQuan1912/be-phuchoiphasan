@@ -33,16 +33,20 @@ export class MailService {
   }
 
   async sendToCompany(options: SendMailOptions): Promise<void> {
+    await this.sendTo(this.to, options);
+  }
+
+  async sendTo(to: string, options: SendMailOptions): Promise<void> {
     await this.transporter.sendMail({
       from: options.fromName
         ? { name: options.fromName, address: this.fromAddress }
         : this.from,
-      to: this.to,
+      to,
       subject: options.subject,
       text: options.text,
       html: options.html,
       replyTo: options.replyTo,
     });
-    this.logger.log(`Đã gửi mail tới ${this.to}: ${options.subject}`);
+    this.logger.log(`Đã gửi mail tới ${to}: ${options.subject}`);
   }
 }

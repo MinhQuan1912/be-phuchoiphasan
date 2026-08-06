@@ -9,15 +9,15 @@ import { PrismaService } from '../prisma/prisma.service';
 import { slugifyOrDefault } from '../common/utils/slugify';
 import { pickText, type Locale } from '../common/utils/locale';
 import { CreateCategoryDto, UpdateCategoryDto } from './dto/category.dto';
+import { ActivityService, type Actor } from '../activity/activity.service';
 
 @Injectable()
 export class CategoryService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private activity: ActivityService,
+  ) {}
 
-  /**
-   * `name` trả về đã theo `locale` (thiếu bản dịch thì lùi về tiếng Việt).
-   * `nameEn` vẫn trả nguyên bản để form Admin sửa được bản dịch.
-   */
   async findAll(kind?: CategoryKind, locale: Locale = 'vi') {
     const items = await this.prisma.category.findMany({
       where: kind ? { kind } : {},
@@ -77,7 +77,7 @@ export class CategoryService {
     throw new BadRequestException('Không sinh được slug cho chuyên mục');
   }
 
-  async update(id: string, dto: UpdateCategoryDto) {
+  async update(id: string, dto: UpdateCategoryDto, actor: Actor) {
     const existing = await this.prisma.category.findUnique({
       where: { id },
       select: { id: true },
@@ -98,19 +98,31 @@ export class CategoryService {
       data.name = name;
       data.slug = await this.generateSlug(name, id);
     }
-    return this.prisma.category.update({
+    const category = await this.prisma.category.update({
       where: { id },
       data,
       select: { id: true, name: true, nameEn: true, slug: true, kind: true },
     });
+
+    await this.activity.log({
+      actor,
+      action: 'UPDATE',
+      targetType: 'CATEGORY',
+      targetId: category.id,
+      targetTitle: category.name,
+      targetKind: category.kind,
+    });
+
+    return category;
   }
 
-  async remove(id: string) {
+  async remove(id: string, actor: Actor) {
     const existing = await this.prisma.category.findUnique({
       where: { id },
       select: {
         id: true,
         name: true,
+        kind: true,
         _count: { select: { articles: true } },
       },
     });
@@ -123,6 +135,16 @@ export class CategoryService {
     }
 
     await this.prisma.category.delete({ where: { id } });
+
+    await this.activity.log({
+      actor,
+      action: 'DELETE',
+      targetType: 'CATEGORY',
+      targetId: id,
+      targetTitle: existing.name,
+      targetKind: existing.kind,
+    });
+
     return { id };
   }
 }

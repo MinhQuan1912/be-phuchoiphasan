@@ -19,9 +19,30 @@ model Admin {
   password String
   name     String?
   tokenIssuedAt DateTime @default(now())
+  resetOtpHash      String?
+  resetOtpExpiresAt DateTime?
+  resetOtpAttempts  Int       @default(0)
+  activities ActivityLog[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model ActivityLog {
+  id          String         @id @default(uuid())
+  adminId     String?
+  admin       Admin?         @relation(fields: [adminId], references: [id], onDelete: SetNull)
+  adminName   String
+  action      ActivityAction
+  targetType  ActivityTarget
+  targetId    String?
+  targetTitle String
+  targetKind  CategoryKind?
+  createdAt   DateTime       @default(now())
+
+  @@index([createdAt])
+  @@index([adminId])
+  @@index([targetKind])
 }
 
 model Category {
@@ -93,6 +114,19 @@ enum CategoryKind {
   EVENT 
   FAQ 
   LEGAL 
+}
+
+enum ActivityAction {
+  CREATE
+  UPDATE
+  DELETE
+  PUBLISH
+  UNPUBLISH
+}
+
+enum ActivityTarget {
+  ARTICLE
+  CATEGORY
 }
 
 enum Court {

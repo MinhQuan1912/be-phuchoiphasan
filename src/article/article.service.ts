@@ -28,6 +28,7 @@ import {
   UpdateArticleDto,
   ListArticleQueryDto,
 } from './dto/article.dto';
+import { ActivityService, type Actor } from '../activity/activity.service';
 
 type BlockInput =
   | {
@@ -110,7 +111,11 @@ const adminArticleSelect = {
 export class ArticleService {
   private readonly logger = new Logger(ArticleService.name);
 
-  constructor(private prisma: PrismaService, private s3: S3Service) {}
+  constructor(
+    private prisma: PrismaService,
+    private s3: S3Service,
+    private activity: ActivityService,
+  ) {}
 
   private async cleanupS3(urls: string[]) {
     for (const url of urls) {
@@ -309,8 +314,6 @@ export class ArticleService {
       this.prisma.article.count({ where }),
     ]);
 
-    // `hasEn` ở danh sách xét theo tiêu đề — đây là trường duy nhất danh sách
-    // hiển thị nguyên văn. Trang chi tiết xét kỹ hơn (xem findOnePublicBySlug).
     const items = rows.map(({ blocks, titleEn, category, ...article }) => ({
       ...article,
       title: pickText(locale, article.title, titleEn),
@@ -338,9 +341,6 @@ export class ArticleService {
 
     const { titleEn, category, blocks, ...rest } = article;
 
-    // Trang chi tiết hiện nguyên văn thân bài, nên chỉ coi là "đã có bản tiếng
-    // Anh" khi cả tiêu đề lẫn mọi khối chữ đều được dịch. Thiếu một khối là còn
-    // lẫn tiếng Việt trong bài — phải gắn nhãn cho người đọc biết.
     const textBlocks = blocks.filter((b) => b.type === BlockType.TEXT);
     const hasEn =
       hasTranslation(titleEn) && textBlocks.every((b) => hasTranslation(b.contentEn));
@@ -460,10 +460,15 @@ export class ArticleService {
     };
   }
 
-  async setStatus(id: string, status: ArticleStatus) {
+  async setStatus(id: string, status: ArticleStatus, actor: Actor) {
     const existing = await this.prisma.article.findUnique({
       where: { id },
-      select: { id: true, featured: true },
+      select: {
+        id: true,
+        title: true,
+        featured: true,
+        category: { select: { kind: true } },
+      },
     });
     if (!existing) throw new NotFoundException('Không tìm thấy bài viết');
 
@@ -477,6 +482,16 @@ export class ArticleService {
       existing.featured && status === ArticleStatus.PUBLISHED
         ? await this.enforceFeaturedLimit(id)
         : [];
+
+    await this.activity.log({
+      actor,
+      action:
+        status === ArticleStatus.PUBLISHED ? 'PUBLISH' : 'UNPUBLISH',
+      targetType: 'ARTICLE',
+      targetId: id,
+      targetTitle: existing.title,
+      targetKind: existing.category.kind,
+    });
 
     return { article, unfeatured };
   }
@@ -585,6 +600,7 @@ export class ArticleService {
     thumbnail: Express.Multer.File | undefined,
     contentImages: Express.Multer.File[],
     contentFiles: Express.Multer.File[] = [],
+    actor: Actor,
   ) {
     assertPdfFiles(contentFiles);
     const existing = await this.prisma.article.findUnique({
@@ -737,6 +753,15 @@ export class ArticleService {
           ? await this.enforceFeaturedLimit(article.id)
           : [];
 
+      await this.activity.log({
+        actor,
+        action: 'UPDATE',
+        targetType: 'ARTICLE',
+        targetId: article.id,
+        targetTitle: article.title,
+        targetKind: article.category.kind,
+      });
+
       return { article, unfeatured };
     } catch (err) {
       await this.cleanupS3(uploaded);
@@ -744,10 +769,10 @@ export class ArticleService {
     }
   }
 
-  async remove(id: string) {
+  async remove(id: string, actor: Actor) {
     const existing = await this.prisma.article.findUnique({
       where: { id },
-      include: { blocks: true },
+      include: { blocks: true, category: { select: { kind: true } } },
     });
     if (!existing) throw new NotFoundException('Không tìm thấy bài viết');
     await this.prisma.article.delete({ where: { id } });
@@ -755,6 +780,15 @@ export class ArticleService {
       .filter((b) => b.type !== 'TEXT')
       .map((b) => b.content);
     await this.cleanupS3([existing.thumbnail, ...uploads]);
+    
+    await this.activity.log({
+      actor,
+      action: 'DELETE',
+      targetType: 'ARTICLE',
+      targetId: id,
+      targetTitle: existing.title,
+      targetKind: existing.category.kind,
+    });
 
     return { id };
   }
