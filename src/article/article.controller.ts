@@ -29,6 +29,7 @@ import {
   ListArticleQueryDto,
 } from './dto/article.dto';
 import { JwtAuthGuard } from '../auth/guard/jwt-auth.guard';
+import { parseLocale } from '../common/utils/locale';
 
 const UPLOAD_LIMITS = { limits: { fileSize: 20 * 1024 * 1024 } };
 
@@ -53,6 +54,7 @@ export class ArticleController {
     @Query('featured') featured?: string,
     @Query('q') q?: string,
     @Query('sort') sort?: string,
+    @Query('lang') lang?: string,
   ) {
     return {
       message: 'Lấy danh sách bài viết thành công',
@@ -65,6 +67,7 @@ export class ArticleController {
         featured === undefined ? undefined : featured === 'true',
         q,
         sort === 'views' ? 'views' : undefined,
+        parseLocale(lang),
       ),
     };
   }
@@ -97,10 +100,10 @@ export class ArticleController {
   }
 
   @Get(':slug')
-  async findOneBySlug(@Param('slug') slug: string) {
+  async findOneBySlug(@Param('slug') slug: string, @Query('lang') lang?: string) {
     return {
       message: 'Lấy chi tiết bài viết thành công',
-      data: await this.service.findOnePublicBySlug(slug),
+      data: await this.service.findOnePublicBySlug(slug, parseLocale(lang)),
     };
   }
 

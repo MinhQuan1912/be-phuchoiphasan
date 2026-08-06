@@ -27,6 +27,7 @@ model Admin {
 model Category {
   id        String       @id @default(uuid())
   name      String       @unique
+  nameEn    String?
   slug      String       @unique
   kind      CategoryKind @default(NEWS)
   articles  Article[]
@@ -39,6 +40,7 @@ model Category {
 model Article {
   id           String         @id @default(uuid())
   title        String
+  titleEn      String?
   slug         String         @unique
   thumbnail    String
   status       ArticleStatus  @default(DRAFT)
@@ -64,7 +66,9 @@ model ContentBlock {
   id        String      @id @default(uuid())
   type      BlockType
   content   String      @db.Text
+  contentEn String?     @db.Text
   caption   String?     @db.Text
+  captionEn String?     @db.Text
   order     Int
   articleId String
   article   Article     @relation(fields: [articleId], references: [id], onDelete: Cascade)

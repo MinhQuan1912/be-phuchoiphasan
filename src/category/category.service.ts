@@ -7,19 +7,25 @@ import {
 import { CategoryKind } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { slugifyOrDefault } from '../common/utils/slugify';
+import { pickText, type Locale } from '../common/utils/locale';
 import { CreateCategoryDto, UpdateCategoryDto } from './dto/category.dto';
 
 @Injectable()
 export class CategoryService {
   constructor(private prisma: PrismaService) {}
 
-  async findAll(kind?: CategoryKind) {
+  /**
+   * `name` trả về đã theo `locale` (thiếu bản dịch thì lùi về tiếng Việt).
+   * `nameEn` vẫn trả nguyên bản để form Admin sửa được bản dịch.
+   */
+  async findAll(kind?: CategoryKind, locale: Locale = 'vi') {
     const items = await this.prisma.category.findMany({
       where: kind ? { kind } : {},
       orderBy: { name: 'asc' },
       select: {
         id: true,
         name: true,
+        nameEn: true,
         slug: true,
         kind: true,
         _count: { select: { articles: true } },
@@ -28,6 +34,7 @@ export class CategoryService {
 
     return items.map(({ _count, ...c }) => ({
       ...c,
+      name: pickText(locale, c.name, c.nameEn),
       articleCount: _count.articles,
     }));
   }
@@ -45,8 +52,8 @@ export class CategoryService {
     const slug = await this.generateSlug(name);
 
     return this.prisma.category.create({
-      data: { name, slug, kind: dto.kind ?? 'NEWS' },
-      select: { id: true, name: true, slug: true, kind: true },
+      data: { name, nameEn: dto.nameEn ?? null, slug, kind: dto.kind ?? 'NEWS' },
+      select: { id: true, name: true, nameEn: true, slug: true, kind: true },
     });
   }
 
@@ -77,7 +84,9 @@ export class CategoryService {
     });
     if (!existing) throw new NotFoundException('Không tìm thấy chuyên mục');
 
-    const data: { name?: string; slug?: string } = {};
+    const data: { name?: string; nameEn?: string | null; slug?: string } = {};
+
+    if (dto.nameEn !== undefined) data.nameEn = dto.nameEn;
 
     if (dto.name !== undefined) {
       const name = dto.name.trim();
@@ -92,7 +101,7 @@ export class CategoryService {
     return this.prisma.category.update({
       where: { id },
       data,
-      select: { id: true, name: true, slug: true, kind: true },
+      select: { id: true, name: true, nameEn: true, slug: true, kind: true },
     });
   }
 

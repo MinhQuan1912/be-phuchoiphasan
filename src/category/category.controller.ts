@@ -13,16 +13,20 @@ import { CategoryKind } from '@prisma/client';
 import { CategoryService } from './category.service';
 import { CreateCategoryDto, UpdateCategoryDto } from './dto/category.dto';
 import { JwtAuthGuard } from '../auth/guard/jwt-auth.guard';
+import { parseLocale } from '../common/utils/locale';
 
 @Controller('categories')
 export class CategoryController {
   constructor(private service: CategoryService) {}
 
   @Get()
-  async findAll(@Query('kind') kind?: CategoryKind) {
+  async findAll(
+    @Query('kind') kind?: CategoryKind,
+    @Query('lang') lang?: string,
+  ) {
     return {
       message: 'Lấy danh sách chuyên mục thành công',
-      data: await this.service.findAll(kind),
+      data: await this.service.findAll(kind, parseLocale(lang)),
     };
   }
 

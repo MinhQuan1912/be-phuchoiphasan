@@ -7,6 +7,7 @@ import {
   IsUUID,
   IsInt,
   IsDateString,
+  IsIn,
   Min,
   Max,
 } from 'class-validator';
@@ -22,6 +23,12 @@ export class CreateArticleDto {
   @IsString()
   @IsNotEmpty()
   title: string;
+
+  // Bản dịch tiếng Anh — bỏ trống thì site tiếng Anh hiển thị bản tiếng Việt
+  @IsOptional()
+  @Transform(({ value }) => (value === '' ? undefined : value))
+  @IsString()
+  titleEn?: string;
 
   @IsString()
   @IsNotEmpty()
@@ -64,6 +71,12 @@ export class UpdateArticleDto {
   @IsOptional()
   @IsString()
   title?: string;
+
+  // Xóa trắng ô tiếng Anh ở Admin = gỡ bản dịch, nên '' phải thành null
+  @IsOptional()
+  @Transform(({ value }) => (value === '' ? null : value))
+  @IsString()
+  titleEn?: string | null;
 
   @IsOptional()
   @IsString()
@@ -147,4 +160,11 @@ export class ListArticleQueryDto {
   @IsOptional()
   @IsString()
   q?: string;
+}
+
+/** Query dùng chung cho các endpoint public có nội dung đa ngôn ngữ */
+export class LocaleQueryDto {
+  @IsOptional()
+  @IsIn(['vi', 'en'])
+  lang?: 'vi' | 'en';
 }

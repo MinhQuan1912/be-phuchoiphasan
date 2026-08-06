@@ -18,6 +18,12 @@ import { unaccentedContains } from '../common/utils/search';
 import { toExcerpt } from '../common/utils/excerpt';
 import { decodeOriginalName } from '../common/utils/filename';
 import {
+  hasTranslation,
+  pickNullableText,
+  pickText,
+  type Locale,
+} from '../common/utils/locale';
+import {
   CreateArticleDto,
   UpdateArticleDto,
   ListArticleQueryDto,
@@ -27,18 +33,21 @@ type BlockInput =
   | {
       type: 'TEXT';
       content: string;
+      contentEn?: string;
     }
   | {
       type: 'IMAGE';
       imageIndex: number;
       content?: string;
       caption?: string;
+      captionEn?: string;
     }
   | {
       type: 'FILE';
       fileIndex: number;
       content?: string;
       caption?: string;
+      captionEn?: string;
     };
 
 function normalizeCaption(raw?: string): string | null {
@@ -80,6 +89,7 @@ export interface UnfeaturedArticle {
 const adminArticleSelect = {
   id: true,
   title: true,
+  titleEn: true,
   slug: true,
   thumbnail: true,
   status: true,
@@ -89,7 +99,9 @@ const adminArticleSelect = {
   documentCode: true,
   effectiveDate: true,
   categoryId: true,
-  category: { select: { id: true, name: true, slug: true, kind: true } },
+  category: {
+    select: { id: true, name: true, nameEn: true, slug: true, kind: true },
+  },
   createdAt: true,
   updatedAt: true,
 } satisfies Prisma.ArticleSelect;
@@ -219,6 +231,18 @@ export class ArticleService {
     }
   }
 
+  /**
+   * Đưa chuyên mục về đúng ngôn ngữ đang xem. Client chỉ thấy `name`, không
+   * phải biết bài có bản dịch hay không.
+   */
+  private localizeCategory(
+    locale: Locale,
+    category: { id: string; name: string; nameEn: string | null; slug: string; kind: CategoryKind },
+  ) {
+    const { nameEn, ...rest } = category;
+    return { ...rest, name: pickText(locale, category.name, nameEn) };
+  }
+
   // ---------- PUBLIC ----------
   async findAllPublic(
     page = 1,
@@ -229,6 +253,7 @@ export class ArticleService {
     featured?: boolean,
     q?: string,
     sort?: 'views',
+    locale: Locale = 'vi',
   ) {
     const skip = (page - 1) * limit;
     const keyword = q?.trim();
@@ -261,6 +286,7 @@ export class ArticleService {
         select: {
           id: true,
           title: true,
+          titleEn: true,
           slug: true,
           thumbnail: true,
           featured: true,
@@ -269,37 +295,71 @@ export class ArticleService {
           documentCode: true,
           effectiveDate: true,
           createdAt: true,
-          category: { select: { id: true, name: true, slug: true, kind: true } },
+          category: {
+            select: { id: true, name: true, nameEn: true, slug: true, kind: true },
+          },
           blocks: {
             where: { type: BlockType.TEXT },
             orderBy: { order: 'asc' },
             take: 1,
-            select: { content: true },
+            select: { content: true, contentEn: true },
           },
         },
       }),
       this.prisma.article.count({ where }),
     ]);
 
-    const items = rows.map(({ blocks, ...article }) => ({
+    // `hasEn` ở danh sách xét theo tiêu đề — đây là trường duy nhất danh sách
+    // hiển thị nguyên văn. Trang chi tiết xét kỹ hơn (xem findOnePublicBySlug).
+    const items = rows.map(({ blocks, titleEn, category, ...article }) => ({
       ...article,
-      excerpt: toExcerpt(blocks[0]?.content),
+      title: pickText(locale, article.title, titleEn),
+      category: this.localizeCategory(locale, category),
+      excerpt: toExcerpt(
+        pickText(locale, blocks[0]?.content ?? '', blocks[0]?.contentEn),
+      ),
+      hasEn: hasTranslation(titleEn),
     }));
 
     return { items, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
-  async findOnePublicBySlug(slug: string) {
+  async findOnePublicBySlug(slug: string, locale: Locale = 'vi') {
     const article = await this.prisma.article.findFirst({
       where: { slug, status: ArticleStatus.PUBLISHED },
       include: {
         blocks: { orderBy: { order: 'asc' } },
-        category: { select: { id: true, name: true, slug: true, kind: true } },
+        category: {
+          select: { id: true, name: true, nameEn: true, slug: true, kind: true },
+        },
       },
     });
     if (!article) throw new NotFoundException('Không tìm thấy bài viết');
 
-    return article;
+    const { titleEn, category, blocks, ...rest } = article;
+
+    // Trang chi tiết hiện nguyên văn thân bài, nên chỉ coi là "đã có bản tiếng
+    // Anh" khi cả tiêu đề lẫn mọi khối chữ đều được dịch. Thiếu một khối là còn
+    // lẫn tiếng Việt trong bài — phải gắn nhãn cho người đọc biết.
+    const textBlocks = blocks.filter((b) => b.type === BlockType.TEXT);
+    const hasEn =
+      hasTranslation(titleEn) && textBlocks.every((b) => hasTranslation(b.contentEn));
+
+    return {
+      ...rest,
+      title: pickText(locale, article.title, titleEn),
+      category: this.localizeCategory(locale, category),
+      blocks: blocks.map(({ contentEn, captionEn, ...block }) => ({
+        ...block,
+        // Ảnh và tệp: `content` là URL, không dịch — chỉ dịch chú thích
+        content:
+          block.type === BlockType.TEXT
+            ? pickText(locale, block.content, contentEn)
+            : block.content,
+        caption: pickNullableText(locale, block.caption, captionEn),
+      })),
+      hasEn,
+    };
   }
   
   async countView(slug: string) {
@@ -318,12 +378,13 @@ export class ArticleService {
   }
 
 
+  /** Tìm theo cả tiêu đề tiếng Việt lẫn tiêu đề tiếng Anh, bất kể đang xem ngôn ngữ nào */
   private async searchIdsByTitle(q: string) {
     const rows = await this.prisma.$queryRaw<{ id: string }[]>(
       Prisma.sql`SELECT "id" FROM "Article" WHERE ${unaccentedContains(
         Prisma.sql`"title"`,
         q,
-      )}`,
+      )} OR ${unaccentedContains(Prisma.sql`COALESCE("titleEn", '')`, q)}`,
     );
     return rows.map((r) => r.id);
   }
@@ -362,7 +423,9 @@ export class ArticleService {
       where: { id },
       include: {
         blocks: { orderBy: { order: 'asc' } },
-        category: { select: { id: true, name: true, slug: true, kind: true } },
+        category: {
+    select: { id: true, name: true, nameEn: true, slug: true, kind: true },
+  },
       },
     });
     if (!article) throw new NotFoundException('Không tìm thấy bài viết');
@@ -455,6 +518,7 @@ export class ArticleService {
             type: 'IMAGE' as const,
             content: url,
             caption: normalizeCaption(b.caption),
+            captionEn: normalizeCaption(b.captionEn),
             order: i,
           };
         }
@@ -465,15 +529,22 @@ export class ArticleService {
             type: 'FILE' as const,
             content: url,
             caption: fileLabel(b.caption, contentFiles[b.fileIndex]),
+            captionEn: normalizeCaption(b.captionEn),
             order: i,
           };
         }
-        return { type: 'TEXT' as const, content: b.content || '', order: i };
+        return {
+          type: 'TEXT' as const,
+          content: b.content || '',
+          contentEn: normalizeCaption(b.contentEn),
+          order: i,
+        };
       });
 
       const article = await this.prisma.article.create({
         data: {
           title: dto.title,
+          titleEn: dto.titleEn ?? null,
           slug,
           thumbnail: thumbnailUrl,
           status: dto.status ?? ArticleStatus.DRAFT,
@@ -486,7 +557,9 @@ export class ArticleService {
         },
         include: {
           blocks: { orderBy: { order: 'asc' } },
-          category: { select: { id: true, name: true, slug: true, kind: true } },
+          category: {
+    select: { id: true, name: true, nameEn: true, slug: true, kind: true },
+  },
         },
       });
 
@@ -522,6 +595,7 @@ export class ArticleService {
 
     const data: Prisma.ArticleUpdateInput = {};
     if (dto.title !== undefined) data.title = dto.title;
+    if (dto.titleEn !== undefined) data.titleEn = dto.titleEn;
     if (dto.status !== undefined) data.status = dto.status;
     if (dto.featured !== undefined) data.featured = dto.featured;
     if (dto.court !== undefined) data.court = dto.court;
@@ -552,8 +626,10 @@ export class ArticleService {
         | {
             type: 'TEXT' | 'IMAGE' | 'FILE';
             content: string;
+            contentEn?: string | null;
             order: number;
             caption?: string | null;
+            captionEn?: string | null;
           }[]
         | null = null;
 
@@ -575,24 +651,34 @@ export class ArticleService {
         blockData = blocks.map((b, i) => {
           if (b.type === 'IMAGE') {
             const caption = normalizeCaption(b.caption);
+            const captionEn = normalizeCaption(b.captionEn);
             if (b.content && b.content.startsWith('http')) {
               return {
                 type: 'IMAGE' as const,
                 content: b.content,
                 caption,
+                captionEn,
                 order: i,
               };
             }
             const url = uploadedUrls[b.imageIndex];
             if (!url) throw new BadRequestException(`Thiếu ảnh cho block ${i}`);
-            return { type: 'IMAGE' as const, content: url, caption, order: i };
+            return {
+              type: 'IMAGE' as const,
+              content: url,
+              caption,
+              captionEn,
+              order: i,
+            };
           }
           if (b.type === 'FILE') {
+            const captionEn = normalizeCaption(b.captionEn);
             if (b.content && b.content.startsWith('http')) {
               return {
                 type: 'FILE' as const,
                 content: b.content,
                 caption: fileLabel(b.caption),
+                captionEn,
                 order: i,
               };
             }
@@ -602,10 +688,16 @@ export class ArticleService {
               type: 'FILE' as const,
               content: url,
               caption: fileLabel(b.caption, contentFiles[b.fileIndex]),
+              captionEn,
               order: i,
             };
           }
-          return { type: 'TEXT' as const, content: b.content || '', order: i };
+          return {
+            type: 'TEXT' as const,
+            content: b.content || '',
+            contentEn: normalizeCaption(b.contentEn),
+            order: i,
+          };
         });
 
         const keepUrls = new Set(
@@ -631,7 +723,9 @@ export class ArticleService {
           data,
           include: {
             blocks: { orderBy: { order: 'asc' } },
-            category: { select: { id: true, name: true, slug: true, kind: true } },
+            category: {
+    select: { id: true, name: true, nameEn: true, slug: true, kind: true },
+  },
           },
         });
       });
