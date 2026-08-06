@@ -20,13 +20,16 @@ import {
 const OTP_TTL_MS = 10 * 60 * 1000;
 const OTP_MAX_ATTEMPTS = 5;
 
+const COMPANY_NAME = 'Công ty Hợp danh Quản lý và Thanh lý tài sản Việt Nam';
+const COMPANY_SHORT = 'VAML';
+
 function isEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
 function otpEmailHtml(otp: string): string {
   return `
-    <p>Bạn vừa yêu cầu đặt lại mật khẩu cho tài khoản quản trị Quản Tài Viên VN.</p>
+    <p>Bạn vừa yêu cầu đặt lại mật khẩu cho tài khoản quản trị ${COMPANY_NAME} (${COMPANY_SHORT}).</p>
     <p>Mã xác nhận của bạn là:</p>
     <p style="font-size:28px;font-weight:bold;letter-spacing:6px;margin:16px 0">${otp}</p>
     <p>Mã có hiệu lực trong 10 phút và chỉ dùng được một lần.</p>
@@ -113,7 +116,7 @@ export class AuthService {
 
     try {
       await this.mail.sendTo(admin.username, {
-        subject: 'Mã xác nhận đặt lại mật khẩu — Quản Tài Viên VN',
+        subject: `Mã xác nhận đặt lại mật khẩu — ${COMPANY_SHORT}`,
         html: otpEmailHtml(otp),
         text: `Mã xác nhận đặt lại mật khẩu của bạn là ${otp}. Mã có hiệu lực trong 10 phút.`,
       });
