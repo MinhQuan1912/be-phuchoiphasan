@@ -13,8 +13,8 @@ const VN_PLAIN =
  */
 export function normalizeSearch(input: string): string {
   return input
-    .normalize('NFD') 
-    .replace(/[̀-ͯ]/g, '') 
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
     .replace(/[đĐ]/g, 'd')
     .toLowerCase()
     .trim();

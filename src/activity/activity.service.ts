@@ -74,7 +74,10 @@ export class ActivityService {
 
   async findAll(query: ListActivityQueryDto) {
     const page = Math.max(query.page ?? 1, 1);
-    const limit = Math.min(Math.max(query.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT);
+    const limit = Math.min(
+      Math.max(query.limit ?? DEFAULT_LIMIT, 1),
+      MAX_LIMIT,
+    );
 
     const where: Prisma.ActivityLogWhereInput = {
       action: { in: VISIBLE_ACTIONS },
@@ -86,7 +89,10 @@ export class ActivityService {
     const to = query.to ? new Date(query.to) : undefined;
     if (to) to.setDate(to.getDate() + 1);
     if (from || to) {
-      where.createdAt = { ...(from ? { gte: from } : {}), ...(to ? { lt: to } : {}) };
+      where.createdAt = {
+        ...(from ? { gte: from } : {}),
+        ...(to ? { lt: to } : {}),
+      };
     }
 
     const [items, total] = await this.prisma.$transaction([

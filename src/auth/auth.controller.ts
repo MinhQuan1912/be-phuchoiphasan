@@ -53,8 +53,7 @@ export class AuthController {
   async forgotPassword(@Body() dto: ForgotPasswordDto) {
     await this.auth.forgotPassword(dto);
     return {
-      message:
-        'Nếu tài khoản tồn tại, mã xác nhận đã được gửi tới hòm thư đó',
+      message: 'Mã xác nhận đã được gửi tới hòm thư',
     };
   }
 

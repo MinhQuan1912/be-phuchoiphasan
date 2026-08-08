@@ -8,7 +8,6 @@ import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { ApiResponse } from '../interface';
 
-
 @Injectable()
 export class TransformInterceptor<T> implements NestInterceptor<
   T,

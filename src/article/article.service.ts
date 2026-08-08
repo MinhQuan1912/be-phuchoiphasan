@@ -62,7 +62,8 @@ function fileLabel(caption: string | undefined, file?: Express.Multer.File) {
 }
 
 const PDF_MIME = 'application/pdf';
-const MAX_FILE_BYTES = 20 * 1024 * 1024;
+const MAX_FILE_BYTES = 30 * 1024 * 1024;
+const MAX_FILE_MB = MAX_FILE_BYTES / 1024 / 1024;
 
 function assertPdfFiles(files: Express.Multer.File[]) {
   for (const f of files) {
@@ -73,7 +74,7 @@ function assertPdfFiles(files: Express.Multer.File[]) {
     }
     if (f.size > MAX_FILE_BYTES) {
       throw new BadRequestException(
-        `Tệp "${f.originalname}" vượt quá 20MB`,
+        `Tệp "${f.originalname}" vượt quá ${MAX_FILE_MB}MB`,
       );
     }
   }
@@ -85,7 +86,6 @@ export interface UnfeaturedArticle {
   id: string;
   title: string;
 }
-
 
 const adminArticleSelect = {
   id: true,
@@ -193,10 +193,14 @@ export class ArticleService {
       const candidate = `${base}-${i}`;
       if (!taken.has(candidate)) return candidate;
     }
-    throw new BadRequestException('Không sinh được slug, vui lòng nhập thủ công');
+    throw new BadRequestException(
+      'Không sinh được slug, vui lòng nhập thủ công',
+    );
   }
 
-  private async enforceFeaturedLimit(keepId: string): Promise<UnfeaturedArticle[]> {
+  private async enforceFeaturedLimit(
+    keepId: string,
+  ): Promise<UnfeaturedArticle[]> {
     const featured = await this.prisma.article.findMany({
       where: { featured: true, status: ArticleStatus.PUBLISHED },
       orderBy: { createdAt: 'desc' },
@@ -242,7 +246,13 @@ export class ArticleService {
    */
   private localizeCategory(
     locale: Locale,
-    category: { id: string; name: string; nameEn: string | null; slug: string; kind: CategoryKind },
+    category: {
+      id: string;
+      name: string;
+      nameEn: string | null;
+      slug: string;
+      kind: CategoryKind;
+    },
   ) {
     const { nameEn, ...rest } = category;
     return { ...rest, name: pickText(locale, category.name, nameEn) };
@@ -271,7 +281,9 @@ export class ArticleService {
       : undefined;
     const where: Prisma.ArticleWhereInput = {
       status: ArticleStatus.PUBLISHED,
-      ...(Object.keys(categoryFilter).length ? { category: categoryFilter } : {}),
+      ...(Object.keys(categoryFilter).length
+        ? { category: categoryFilter }
+        : {}),
       ...(courtFilter ? { court: courtFilter } : {}),
       ...(featured !== undefined ? { featured } : {}),
       ...(keyword ? { id: { in: await this.searchIdsByTitle(keyword) } } : {}),
@@ -301,7 +313,13 @@ export class ArticleService {
           effectiveDate: true,
           createdAt: true,
           category: {
-            select: { id: true, name: true, nameEn: true, slug: true, kind: true },
+            select: {
+              id: true,
+              name: true,
+              nameEn: true,
+              slug: true,
+              kind: true,
+            },
           },
           blocks: {
             where: { type: BlockType.TEXT },
@@ -333,7 +351,13 @@ export class ArticleService {
       include: {
         blocks: { orderBy: { order: 'asc' } },
         category: {
-          select: { id: true, name: true, nameEn: true, slug: true, kind: true },
+          select: {
+            id: true,
+            name: true,
+            nameEn: true,
+            slug: true,
+            kind: true,
+          },
         },
       },
     });
@@ -343,7 +367,8 @@ export class ArticleService {
 
     const textBlocks = blocks.filter((b) => b.type === BlockType.TEXT);
     const hasEn =
-      hasTranslation(titleEn) && textBlocks.every((b) => hasTranslation(b.contentEn));
+      hasTranslation(titleEn) &&
+      textBlocks.every((b) => hasTranslation(b.contentEn));
 
     return {
       ...rest,
@@ -361,7 +386,7 @@ export class ArticleService {
       hasEn,
     };
   }
-  
+
   async countView(slug: string) {
     const article = await this.prisma.article.findFirst({
       where: { slug, status: ArticleStatus.PUBLISHED },
@@ -376,7 +401,6 @@ export class ArticleService {
     });
     return { views: updated.views };
   }
-
 
   /** Tìm theo cả tiêu đề tiếng Việt lẫn tiêu đề tiếng Anh, bất kể đang xem ngôn ngữ nào */
   private async searchIdsByTitle(q: string) {
@@ -424,14 +448,19 @@ export class ArticleService {
       include: {
         blocks: { orderBy: { order: 'asc' } },
         category: {
-    select: { id: true, name: true, nameEn: true, slug: true, kind: true },
-  },
+          select: {
+            id: true,
+            name: true,
+            nameEn: true,
+            slug: true,
+            kind: true,
+          },
+        },
       },
     });
     if (!article) throw new NotFoundException('Không tìm thấy bài viết');
     return article;
   }
-
 
   async stats(kind: CategoryKind = CategoryKind.NEWS) {
     const byKind: Prisma.ArticleWhereInput = { category: { kind } };
@@ -485,8 +514,7 @@ export class ArticleService {
 
     await this.activity.log({
       actor,
-      action:
-        status === ArticleStatus.PUBLISHED ? 'PUBLISH' : 'UNPUBLISH',
+      action: status === ArticleStatus.PUBLISHED ? 'PUBLISH' : 'UNPUBLISH',
       targetType: 'ARTICLE',
       targetId: id,
       targetTitle: existing.title,
@@ -573,8 +601,14 @@ export class ArticleService {
         include: {
           blocks: { orderBy: { order: 'asc' } },
           category: {
-    select: { id: true, name: true, nameEn: true, slug: true, kind: true },
-  },
+            select: {
+              id: true,
+              name: true,
+              nameEn: true,
+              slug: true,
+              kind: true,
+            },
+          },
         },
       });
 
@@ -617,7 +651,9 @@ export class ArticleService {
     if (dto.court !== undefined) data.court = dto.court;
     if (dto.documentCode !== undefined) data.documentCode = dto.documentCode;
     if (dto.effectiveDate !== undefined) {
-      data.effectiveDate = dto.effectiveDate ? new Date(dto.effectiveDate) : null;
+      data.effectiveDate = dto.effectiveDate
+        ? new Date(dto.effectiveDate)
+        : null;
     }
 
     if (dto.categoryId !== undefined) {
@@ -740,8 +776,14 @@ export class ArticleService {
           include: {
             blocks: { orderBy: { order: 'asc' } },
             category: {
-    select: { id: true, name: true, nameEn: true, slug: true, kind: true },
-  },
+              select: {
+                id: true,
+                name: true,
+                nameEn: true,
+                slug: true,
+                kind: true,
+              },
+            },
           },
         });
       });
@@ -780,7 +822,7 @@ export class ArticleService {
       .filter((b) => b.type !== 'TEXT')
       .map((b) => b.content);
     await this.cleanupS3([existing.thumbnail, ...uploads]);
-    
+
     await this.activity.log({
       actor,
       action: 'DELETE',

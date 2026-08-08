@@ -52,7 +52,12 @@ export class CategoryService {
     const slug = await this.generateSlug(name);
 
     return this.prisma.category.create({
-      data: { name, nameEn: dto.nameEn ?? null, slug, kind: dto.kind ?? 'NEWS' },
+      data: {
+        name,
+        nameEn: dto.nameEn ?? null,
+        slug,
+        kind: dto.kind ?? 'NEWS',
+      },
       select: { id: true, name: true, nameEn: true, slug: true, kind: true },
     });
   }

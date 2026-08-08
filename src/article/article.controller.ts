@@ -32,7 +32,7 @@ import {
 import { JwtAuthGuard } from '../auth/guard/jwt-auth.guard';
 import { parseLocale } from '../common/utils/locale';
 
-const UPLOAD_LIMITS = { limits: { fileSize: 20 * 1024 * 1024 } };
+const UPLOAD_LIMITS = { limits: { fileSize: 30 * 1024 * 1024 } };
 
 function withFeaturedNote(base: string, unfeatured: UnfeaturedArticle[]) {
   if (!unfeatured.length) return base;
@@ -96,12 +96,15 @@ export class ArticleController {
   async findOneAdmin(@Param('id') id: string) {
     return {
       message: 'Lấy chi tiết bài viết thành công',
-     data: await this.service.findOneAdmin(id),
+      data: await this.service.findOneAdmin(id),
     };
   }
 
   @Get(':slug')
-  async findOneBySlug(@Param('slug') slug: string, @Query('lang') lang?: string) {
+  async findOneBySlug(
+    @Param('slug') slug: string,
+    @Query('lang') lang?: string,
+  ) {
     return {
       message: 'Lấy chi tiết bài viết thành công',
       data: await this.service.findOnePublicBySlug(slug, parseLocale(lang)),
