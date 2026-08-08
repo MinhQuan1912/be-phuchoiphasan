@@ -3,17 +3,35 @@ import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
 
+/**
+ * `nameEn` phải khớp `notices.types` trong `Frontend/app/i18n/en.ts` — website
+ * tiếng Anh hiển thị chính chuỗi này ở badge chuyên mục và bộ lọc.
+ */
 const NOTICE_CATEGORIES = [
-  { slug: 'mo-thu-tuc-pha-san', name: 'Thông báo mở thủ tục phá sản' },
-  { slug: 'thong-bao-tong-dat', name: 'Thông báo tống đạt' },
+  {
+    slug: 'mo-thu-tuc-pha-san',
+    name: 'Thông báo mở thủ tục phá sản',
+    nameEn: 'Notice of opening bankruptcy proceedings',
+  },
+  {
+    slug: 'thong-bao-tong-dat',
+    name: 'Thông báo tống đạt',
+    nameEn: 'Notice of service of documents',
+  },
   {
     slug: 'danh-sach-chu-no-nguoi-mac-no',
     name: 'Thông báo danh sách chủ nợ, người mắc nợ',
+    nameEn: 'Notice of the list of creditors and debtors',
   },
-  { slug: 'tuyen-bo-doanh-nghiep-pha-san', name: 'Tuyên bố phá sản' },
+  {
+    slug: 'tuyen-bo-doanh-nghiep-pha-san',
+    name: 'Tuyên bố phá sản',
+    nameEn: 'Declaration of bankruptcy',
+  },
   {
     slug: 'lua-chon-to-chuc-dau-gia-tai-san',
     name: 'Lựa chọn tổ chức đấu giá tài sản',
+    nameEn: 'Selection of an asset auction organisation',
   },
 ];
 
@@ -77,24 +95,35 @@ async function main() {
   for (const c of NOTICE_CATEGORIES) {
     await prisma.category.upsert({
       where: { slug: c.slug },
-      update: { name: c.name, kind: 'NOTICE' },
-      create: { name: c.name, slug: c.slug, kind: 'NOTICE' },
+      update: { name: c.name, nameEn: c.nameEn, kind: 'NOTICE' },
+      create: {
+        name: c.name,
+        nameEn: c.nameEn,
+        slug: c.slug,
+        kind: 'NOTICE',
+      },
     });
   }
   console.log('Seeded notice categories:', NOTICE_CATEGORIES.map((c) => c.slug).join(', '));
 
   await prisma.category.upsert({
     where: { slug: 'su-kien' },
-    update: { name: 'Sự kiện', kind: 'EVENT' },
-    create: { name: 'Sự kiện', slug: 'su-kien', kind: 'EVENT' },
+    update: { name: 'Sự kiện', nameEn: 'Events', kind: 'EVENT' },
+    create: {
+      name: 'Sự kiện',
+      nameEn: 'Events',
+      slug: 'su-kien',
+      kind: 'EVENT',
+    },
   });
   console.log('Seeded event category: su-kien');
 
   await prisma.category.upsert({
     where: { slug: 'cau-hoi-thuong-gap' },
-    update: { name: 'Câu hỏi thường gặp', kind: 'FAQ' },
+    update: { name: 'Câu hỏi thường gặp', nameEn: 'FAQ', kind: 'FAQ' },
     create: {
       name: 'Câu hỏi thường gặp',
+      nameEn: 'FAQ',
       slug: 'cau-hoi-thuong-gap',
       kind: 'FAQ',
     },
@@ -103,9 +132,14 @@ async function main() {
 
   await prisma.category.upsert({
     where: { slug: 'van-ban-phap-luat' },
-    update: { name: 'Văn bản pháp luật', kind: 'LEGAL' },
+    update: {
+      name: 'Văn bản pháp luật',
+      nameEn: 'Legal documents',
+      kind: 'LEGAL',
+    },
     create: {
       name: 'Văn bản pháp luật',
+      nameEn: 'Legal documents',
       slug: 'van-ban-phap-luat',
       kind: 'LEGAL',
     },
